@@ -1,70 +1,52 @@
+import 'dart:async';
+
+import 'package:crypto_coins_list/crypto_coins_list_app.dart';
+import 'package:crypto_coins_list/repositories/crypto_coins/crypto_coins.dart';
+import 'package:dio/dio.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
+import 'package:talker_bloc_logger/talker_bloc_logger.dart';
+import 'package:talker_dio_logger/talker_dio_logger.dart';
+import 'package:talker_flutter/talker_flutter.dart';
+import 'firebase_options.dart';
 
-void main() {
-  runApp(const MyApp());
-}
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final talker = TalkerFlutter.init();
+  GetIt.I.registerSingleton(talker);
+  GetIt.I<Talker>().debug('start...');
 
-  // This widget is the root of your application.
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
-  }
-}
+  final app = await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+  talker.info(app.options.projectId);
 
-  final String title;
+  final dio = Dio();
+  dio.interceptors.add(
+    TalkerDioLogger(
+        talker: talker,
+        settings: const TalkerDioLoggerSettings(printResponseData: false)),
+  );
 
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
+  Bloc.observer = TalkerBlocObserver(
+    talker: talker,
+    settings: const TalkerBlocLoggerSettings(
+      printStateFullData: false,
+      printEventFullData: false,
+    ),
+  );
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+  GetIt.I.registerLazySingleton<AbsctractCoinsRepository>(
+      () => CryptoCoinsRepository(dio: dio));
 
-  void _incrementCounter() {
-    setState(() {
-      _counter++;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(widget.title),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
+  FlutterError.onError =
+      (details) => GetIt.I<Talker>().handle(details.exception, details.stack);
+  runZonedGuarded(
+    () => runApp(const CryptoCurrenciesListApp()),
+    (e, st) => GetIt.I<Talker>().handle(e, st),
+  );
 }
